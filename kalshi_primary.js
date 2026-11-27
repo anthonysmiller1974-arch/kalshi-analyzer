@@ -1,7 +1,7 @@
 /* Isolated Kalshi-primary forecast layer. Coinbase is a display-only price clock. */
 (()=>{
 "use strict";
-const API="https://api.elections.kalshi.com/trade-api/v2",SERIES="KXBTC15M",STORE="kalshi_primary_model_v1";
+const API="https://external-api.kalshi.com/trade-api/v2",SERIES="KXBTC15M",STORE="kalshi_primary_model_v1";
 const $=id=>document.getElementById(id);
 const n=v=>{if(v===null||v===undefined||v==="")return NaN;const x=Number(String(v).replace(/[$,]/g,""));return Number.isFinite(x)?x:NaN};
 const time=v=>{if(!v)return NaN;const x=Number(v);if(Number.isFinite(x))return x>1e12?x:x*1000;const d=Date.parse(v);return Number.isFinite(d)?d:NaN};
