@@ -27,6 +27,7 @@ const server = http.createServer(async (req, res) => {
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "600",
+      "Access-Control-Allow-Private-Network": "true",
       "Vary": "Origin"
     });
     return res.end();
