@@ -47,3 +47,5 @@ $("kp-export").onclick=()=>{const b=new Blob([JSON.stringify({exportedAt:new Dat
 findOpen();coinbase();render();setInterval(coinbase,5000);setInterval(()=>{if(!running&&current&&current.end<Date.now()+5000)findOpen()},15000);
 })();
 // Trigger automated API verification against the public Kalshi endpoints.
+
+// Trigger Kalshi primary workflow after enabling branch push runs.
