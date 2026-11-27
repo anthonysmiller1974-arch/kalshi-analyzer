@@ -88,14 +88,16 @@ jobs:
             if curl --silent --fail http://127.0.0.1:8787/health >/dev/null; then break; fi
             sleep 1
           done
-          curl --silent --fail http://127.0.0.1:8787/health >/dev/null || { cat /tmp/kalshi-proxy.log; exit 1; }
+          curl --silent --fail http://127.0.0.1:8787/health -H "Origin: https://anthonysmiller1974-arch.github.io" >/dev/null || { cat /tmp/kalshi-proxy.log; exit 1; }
+          curl --silent --fail -X OPTIONS http://127.0.0.1:8787/markets -H "Origin: https://anthonysmiller1974-arch.github.io" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Private-Network: true" -D /tmp/kalshi-preflight.headers -o /dev/null
+          grep -qi "Access-Control-Allow-Private-Network: true" /tmp/kalshi-preflight.headers || { cat /tmp/kalshi-preflight.headers; exit 1; }
           node --input-type=module <<'NODE'
           import { chromium } from "playwright";
           import { readFileSync } from "node:fs";
           const browser = await chromium.launch({ headless: true });
           try {
             const page = await browser.newPage();
-            await page.addInitScript(() => { window.KALSHI_PROXY_URL = "http://127.0.0.1:8787"; });
+            
             const pageErrors = [];
             const consoleErrors = [];
             const failedRequests = [];
@@ -104,15 +106,31 @@ jobs:
             page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
             page.on("requestfailed", request => failedRequests.push({ url: request.url(), error: request.failure()?.errorText }));
             page.on("response", response => {
-              if (response.url().includes("127.0.0.1:8787/markets?series_ticker=KXBTC15M")) {
+              if (response.url().includes("kalshi-proxy.test/markets?series_ticker=KXBTC15M")) {
                 apiResponses.push({ status: response.status(), url: response.url() });
               }
             });
             await page.route("https://anthonysmiller1974-arch.github.io/**", route => route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><html><head></head><body></body></html>" }));
+            await page.route("https://kalshi-proxy.test/**", async route => {
+              const requested = new URL(route.request().url());
+              const upstream = await fetch("http://127.0.0.1:8787" + requested.pathname + requested.search, {
+                headers: { origin: "https://anthonysmiller1974-arch.github.io", accept: "application/json" }
+              });
+              const body = await upstream.text();
+              await route.fulfill({
+                status: upstream.status,
+                body,
+                headers: {
+                  "content-type": upstream.headers.get("content-type") || "application/json",
+                  "access-control-allow-origin": "https://anthonysmiller1974-arch.github.io",
+                  "vary": "Origin"
+                }
+              });
+            });
             await page.goto("https://anthonysmiller1974-arch.github.io/origin-test", { waitUntil: "domcontentloaded" });
             const html = readFileSync("index.html", "utf8");
             const js = readFileSync("kalshi_primary.js", "utf8");
-            const combined = html.replace('<script src="kalshi_primary.js"></script>', '<script>window.KALSHI_PROXY_URL="http://127.0.0.1:8787";</script><script>' + js + '</script>');
+            const combined = html.replace('<script src="kalshi_primary.js"></script>', '<script>window.KALSHI_PROXY_URL="https://kalshi-proxy.test";</script><script>' + js + '</script>');
             if (combined === html) throw new Error("Could not inline the test-branch JavaScript for origin testing");
             await page.setContent(combined, { waitUntil: "domcontentloaded" });
             const alternateHost = await page.evaluate(async () => {
