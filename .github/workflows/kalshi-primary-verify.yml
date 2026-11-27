@@ -73,3 +73,47 @@ jobs:
             api: "public Kalshi market/detail/batch-candlestick"
           }, null, 2));
           NODE
+
+      - name: Browser smoke test against live APIs
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8080 --directory . >/tmp/kalshi-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          node --input-type=module <<'NODE'
+          import { chromium } from "playwright";
+          const browser = await chromium.launch({ headless: true });
+          try {
+            const page = await browser.newPage();
+            const pageErrors = [];
+            const apiResponses = [];
+            page.on("pageerror", error => pageErrors.push(error.message));
+            page.on("response", response => {
+              if (response.url().includes("external-api.kalshi.com/trade-api/v2/markets?series_ticker=KXBTC15M")) {
+                apiResponses.push({ status: response.status(), url: response.url() });
+              }
+            });
+            await page.goto("http://127.0.0.1:8080/", { waitUntil: "domcontentloaded" });
+            await page.waitForFunction(() => {
+              const s = document.querySelector("#kp-status")?.textContent || "";
+              return s !== "" && s !== "Connecting…";
+            }, { timeout: 20000 });
+            await page.waitForTimeout(1500);
+            const view = await page.evaluate(() => ({
+              heading: document.querySelector("#kalshi-primary-app h1")?.textContent?.trim(),
+              status: document.querySelector("#kp-status")?.textContent?.trim(),
+              ticker: document.querySelector("#kp-ticker")?.textContent?.trim(),
+              coinbase: document.querySelector("#kp-coinbase")?.textContent?.trim(),
+              checkpoints: [10, 7, 5].map(n => !!document.querySelector("#kp-p" + n))
+            }));
+            if (view.heading !== "Kalshi 15-minute Analyzer") throw new Error("Primary analyzer UI did not render");
+            if (!["Kalshi connected", "No open BTC 15m contract"].includes(view.status)) throw new Error("Kalshi browser connection failed: " + view.status);
+            if (!apiResponses.some(x => x.status === 200)) throw new Error("Browser did not receive a successful Kalshi market API response");
+            if (view.checkpoints.some(x => !x)) throw new Error("One or more checkpoint panels are missing");
+            if (pageErrors.length) throw new Error("Browser JavaScript errors: " + pageErrors.join(" | "));
+            console.log(JSON.stringify({ browser: "Chromium", view, kalshiApi: apiResponses, pageErrors }, null, 2));
+          } finally {
+            await browser.close();
+          }
+          NODE
