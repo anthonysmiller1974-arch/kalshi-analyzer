@@ -2,7 +2,7 @@ name: Kalshi primary verification
 
 on:
   push:
-    branches: [kalshi-primary-rebuild, kalshi-primary-rebuild-clean]
+    branches: [kalshi-primary-rebuild, kalshi-primary-rebuild-clean, kalshi-primary-operational-test]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -146,6 +146,15 @@ jobs:
                 return { error: String(error) };
               }
             });
+            const directApi = await page.evaluate(async () => {
+              try {
+                const response = await fetch("https://external-api.kalshi.com/trade-api/v2/markets?series_ticker=KXBTC15M&status=open&limit=5");
+                const data = await response.json();
+                return { status: response.status, ok: response.ok, marketCount: data.markets?.length ?? null };
+              } catch (error) {
+                return { error: String(error) };
+              }
+            });
             await page.waitForTimeout(15000);
             const view = await page.evaluate(() => ({
               origin: location.origin,
@@ -159,10 +168,11 @@ jobs:
             if (view.origin !== "https://anthonysmiller1974-arch.github.io") throw new Error("Browser test did not retain the GitHub Pages origin: " + view.origin);
             if (view.heading !== "Kalshi 15-minute Analyzer") throw new Error("Primary analyzer UI did not render");
             if (!["Kalshi connected", "No open BTC 15m contract"].includes(view.status)) throw new Error("Kalshi browser connection failed: " + JSON.stringify({ view, apiResponses, alternateHost, consoleErrors, failedRequests, pageErrors }));
-            if (!apiResponses.some(x => x.status === 200)) throw new Error("Browser did not receive a successful Kalshi market API response");
+            if (!apiResponses.some(x => x.status === 200)) throw new Error("Browser did not receive a successful Kalshi proxy market API response");
+            if (!directApi.ok) throw new Error("Direct Kalshi API browser CORS test failed: " + JSON.stringify(directApi));
             if (view.checkpoints.some(x => !x)) throw new Error("One or more checkpoint panels are missing");
             if (pageErrors.length) throw new Error("Browser JavaScript errors: " + pageErrors.join(" | "));
-            console.log(JSON.stringify({ browser: "Chromium", view, kalshiApi: apiResponses, alternateHost, consoleErrors, failedRequests, pageErrors }, null, 2));
+            console.log(JSON.stringify({ browser: "Chromium", view, kalshiProxyApi: apiResponses, directKalshiApi: directApi, alternateHost, consoleErrors, failedRequests, pageErrors }, null, 2));
           } finally {
             await browser.close();
           }
