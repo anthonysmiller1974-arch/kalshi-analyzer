@@ -1,7 +1,7 @@
 /* Isolated Kalshi-primary forecast layer. Coinbase is a display-only price clock. */
 (()=>{
 "use strict";
-const API="https://external-api.kalshi.com/trade-api/v2",SERIES="KXBTC15M",STORE="kalshi_primary_model_v1";
+const API=(window.KALSHI_PROXY_URL||"").replace(/\/$/,""),SERIES="KXBTC15M",STORE="kalshi_primary_model_v1";
 const $=id=>document.getElementById(id);
 const n=v=>{if(v===null||v===undefined||v==="")return NaN;const x=Number(String(v).replace(/[$,]/g,""));return Number.isFinite(x)?x:NaN};
 const time=v=>{if(!v)return NaN;const x=Number(v);if(Number.isFinite(x))return x>1e12?x:x*1000;const d=Date.parse(v);return Number.isFinite(d)?d:NaN};
@@ -25,7 +25,7 @@ root.innerHTML='<div class="row"><div><h1>Kalshi 15-minute Analyzer</h1><div cla
 '<section class="card"><h2>Recent checkpoint records</h2><div class="scroll"><table><thead><tr><th>Contract</th><th>Time</th><th>Forecast</th><th>Official result</th></tr></thead><tbody id="kp-log"></tbody></table></div><p class="muted">Research information only; not betting advice. A forecast is scored only after Kalshi reports an official settled YES/NO result. Missed checkpoints are not reconstructed from later data.</p></section>';
 document.querySelector("main").appendChild(root);
 const save=()=>{try{localStorage.setItem(STORE,JSON.stringify(state))}catch(e){$("kp-history-status").textContent="Local storage is full; export the records."}};
-const get=async url=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);try{const r=await fetch(url,{cache:"no-store",signal:c.signal});if(!r.ok)throw Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(t)}};
+const get=async url=>{const absolute=/^https?:\\/\\//i.test(url);if(!absolute&&!API)throw Error("Kalshi proxy is not configured");const target=absolute?url:API+url;const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);try{const r=await fetch(target,{cache:"no-store",signal:c.signal});if(!r.ok)throw Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(t)}};
 function parse(m){if(!m)return null;const end=time(m.close_time||m.latest_expiration_time||m.expiration_time),open=time(m.open_time||m.created_time);return{ticker:String(m.ticker||""),open:Number.isFinite(open)?open:end-900000,end,target:n(m.floor_strike_dollars??m.floor_strike),bid:dollars(m.yes_bid_dollars??m.yes_bid),ask:dollars(m.yes_ask_dollars??m.yes_ask),noAsk:dollars(m.no_ask_dollars??m.no_ask),status:String(m.status||"").toLowerCase(),result:String(m.result||"").toLowerCase(),updated:time(m.updated_time),settled:time(m.settlement_ts)}}
 function implied(m){if(Number.isFinite(m.bid)&&Number.isFinite(m.ask)&&m.ask>=m.bid&&(m.bid>0||m.ask>0))return(m.bid+m.ask)/2;if(Number.isFinite(m.ask)&&Number.isFinite(m.noAsk)&&(m.ask>0||m.noAsk>0))return(m.ask+1-m.noAsk)/2;return NaN}
 function bin(p){return Math.min(9,Math.max(0,Math.floor(p*10)))}
