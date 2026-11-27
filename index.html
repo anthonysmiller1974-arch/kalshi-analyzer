@@ -1264,4 +1264,4 @@ $('dualexport').onclick=()=>{const blob=new Blob([JSON.stringify({version:'3.23'
 $('dualclear').onclick=()=>{if(!confirm('Delete only the V3.23 dual-feed observations stored on this device?'))return;state={coinbase:[],kalshi:[]};lastKS=null;lastCB=null;save();show()};
 show();setInterval(sample,1000);
 })();
-</script></body></html>
+</script><script src="kalshi_primary.js"></script></body></html>
