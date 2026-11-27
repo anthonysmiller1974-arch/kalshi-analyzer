@@ -46,3 +46,4 @@ $("kp-history").onclick=history;
 $("kp-export").onclick=()=>{const b=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),model:"Kalshi-only",coinbaseRole:"display-only clock",records:state.records},null,2)],{type:"application/json"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="kalshi_primary_records.json";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
 findOpen();coinbase();render();setInterval(coinbase,5000);setInterval(()=>{if(!running&&current&&current.end<Date.now()+5000)findOpen()},15000);
 })();
+// Trigger automated API verification against the public Kalshi endpoints.
