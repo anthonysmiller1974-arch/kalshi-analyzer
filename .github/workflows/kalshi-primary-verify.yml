@@ -22,6 +22,9 @@ jobs:
           node-version: 20
       - name: Check JavaScript syntax
         run: node --check kalshi_primary.js
+      - name: Check proxy server syntax
+        run: node --check proxy/server.mjs
+
       - name: Probe public Kalshi market and candle APIs
         run: |
           node --input-type=module <<'NODE'
@@ -78,12 +81,21 @@ jobs:
         run: |
           npm install --no-save playwright
           npx playwright install --with-deps chromium
+          node proxy/server.mjs > /tmp/kalshi-proxy.log 2>&1 &
+          PROXY_PID=$!
+          trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --silent --fail http://127.0.0.1:8787/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:8787/health >/dev/null || { cat /tmp/kalshi-proxy.log; exit 1; }
           node --input-type=module <<'NODE'
           import { chromium } from "playwright";
           import { readFileSync } from "node:fs";
           const browser = await chromium.launch({ headless: true });
           try {
             const page = await browser.newPage();
+            await page.addInitScript(() => { window.KALSHI_PROXY_URL = "http://127.0.0.1:8787"; });
             const pageErrors = [];
             const consoleErrors = [];
             const failedRequests = [];
@@ -92,7 +104,7 @@ jobs:
             page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
             page.on("requestfailed", request => failedRequests.push({ url: request.url(), error: request.failure()?.errorText }));
             page.on("response", response => {
-              if (response.url().includes("external-api.kalshi.com/trade-api/v2/markets?series_ticker=KXBTC15M")) {
+              if (response.url().includes("127.0.0.1:8787/markets?series_ticker=KXBTC15M")) {
                 apiResponses.push({ status: response.status(), url: response.url() });
               }
             });
