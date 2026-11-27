@@ -1170,11 +1170,19 @@ function mergeOfficial(m){const v=normalizeKalshiMarket(m);if(!v)return false;le
 }
 async function backfillSettlements(){
  const now=Math.floor(Date.now()/1000),start=now-24*3600;
- const base='https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXBTC15M&status=settled&limit=100&min_settled_ts='+start+'&max_settled_ts='+now;
- let raw=[],cursor='';for(let page=0;page<3;page++){
-  const data=await fetchJson(base+(cursor?'&cursor='+encodeURIComponent(cursor):''));
-  if(!Array.isArray(data.markets))throw Error('Kalshi response did not contain a markets array');raw.push(...data.markets);cursor=data.cursor||'';if(!cursor)break;
+ async function collect(url){
+  let rows=[],cursor='';for(let page=0;page<3;page++){
+   const data=await fetchJson(url+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+   if(!Array.isArray(data.markets))throw Error('Kalshi response did not contain a markets array');
+   rows.push(...data.markets);cursor=data.cursor||'';if(!cursor)break;
+  }return rows;
  }
+ const root='https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXBTC15M&limit=100';
+ const [closed,settled]=await Promise.all([
+  collect(root+'&status=closed&min_close_ts='+start+'&max_close_ts='+now),
+  collect(root+'&status=settled&min_settled_ts='+start+'&max_settled_ts='+now)
+ ]);
+ const raw=[...new Map([...closed,...settled].map(m=>[String(m?.ticker||''),m])).values()];
  const btc=raw.filter(m=>String(m?.ticker||'').startsWith('KXBTC15M-'));
  const all=btc.map(normalizeKalshiMarket).filter(Boolean).sort((a,b)=>b.end-a.end);
  for(const v of all){mergeOfficial({ticker:v.ticker,close_time:new Date(v.end).toISOString(),floor_strike:v.target,status:v.status==='verified'?'settled':'closed',result:v.outcome==='UP'?'yes':v.outcome==='DOWN'?'no':''})}
