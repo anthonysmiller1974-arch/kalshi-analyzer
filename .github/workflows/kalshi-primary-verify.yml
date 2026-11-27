@@ -1,0 +1,73 @@
+name: Kalshi primary verification
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check JavaScript syntax
+        run: node --check kalshi_primary.js
+      - name: Probe public Kalshi market and candle APIs
+        run: |
+          node --input-type=module <<'NODE'
+          const base = "https://external-api.kalshi.com/trade-api/v2";
+          const get = async (url) => {
+            const response = await fetch(url, { headers: { accept: "application/json" } });
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`);
+            return response.json();
+          };
+          const now = Math.floor(Date.now() / 1000);
+          const list = await get(`${base}/markets?series_ticker=KXBTC15M&status=settled&min_settled_ts=${now - 86400}&limit=5`);
+          if (!Array.isArray(list.markets) || list.markets.length === 0) {
+            throw new Error("Kalshi returned no recently settled KXBTC15M markets");
+          }
+          const market = list.markets[0];
+          if (!market.ticker || !["yes", "no"].includes(String(market.result).toLowerCase())) {
+            throw new Error("Settled market is missing ticker or official YES/NO result");
+          }
+          const detailData = await get(`${base}/markets/${encodeURIComponent(market.ticker)}`);
+          const detail = detailData.market || detailData;
+          if (detail.ticker !== market.ticker || !detail.status) {
+            throw new Error("Single-market endpoint returned an unexpected market object");
+          }
+          const open = Math.floor(Date.parse(market.open_time) / 1000);
+          const close = Math.ceil(Date.parse(market.close_time || market.latest_expiration_time) / 1000);
+          if (!Number.isFinite(open) || !Number.isFinite(close) || close <= open) {
+            throw new Error("Market open/close timestamps are not usable");
+          }
+          const candles = await get(`${base}/markets/candlesticks?market_tickers=${encodeURIComponent(market.ticker)}&start_ts=${open}&end_ts=${close}&period_interval=1`);
+          if (!Array.isArray(candles.markets)) {
+            throw new Error("Batch candlestick response is missing its markets array");
+          }
+          const candleMarket = candles.markets.find(x => x.market_ticker === market.ticker);
+          if (!candleMarket || !Array.isArray(candleMarket.candlesticks)) {
+            throw new Error("Batch candlestick response does not contain the requested market candles");
+          }
+          const usable = candleMarket.candlesticks.find(c =>
+            Number.isFinite(Number(c.end_period_ts)) &&
+            (c.yes_bid?.close_dollars != null || c.yes_bid?.close != null) &&
+            (c.yes_ask?.close_dollars != null || c.yes_ask?.close != null)
+          );
+          if (!usable) throw new Error("Candles do not contain the YES bid/ask close fields expected by the analyzer");
+          console.log(JSON.stringify({
+            market: market.ticker,
+            marketStatus: detail.status,
+            result: market.result,
+            candleCount: candleMarket.candlesticks.length,
+            sampleCandleEnd: usable.end_period_ts,
+            api: "public Kalshi market/detail/batch-candlestick"
+          }, null, 2));
+          NODE
