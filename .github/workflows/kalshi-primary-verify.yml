@@ -1,6 +1,8 @@
 name: Kalshi primary verification
 
 on:
+  push:
+    branches: [kalshi-primary-rebuild]
   pull_request:
     branches: [main]
   workflow_dispatch:
