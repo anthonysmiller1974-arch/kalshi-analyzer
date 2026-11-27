@@ -112,7 +112,7 @@ jobs:
             await page.goto("https://anthonysmiller1974-arch.github.io/origin-test", { waitUntil: "domcontentloaded" });
             const html = readFileSync("index.html", "utf8");
             const js = readFileSync("kalshi_primary.js", "utf8");
-            const combined = html.replace('<script src="kalshi_primary.js"></script>', '<script>' + js + '</script>');
+            const combined = html.replace('<script src="kalshi_primary.js"></script>', '<script>window.KALSHI_PROXY_URL="http://127.0.0.1:8787";</script><script>' + js + '</script>');
             if (combined === html) throw new Error("Could not inline the test-branch JavaScript for origin testing");
             await page.setContent(combined, { waitUntil: "domcontentloaded" });
             const alternateHost = await page.evaluate(async () => {
