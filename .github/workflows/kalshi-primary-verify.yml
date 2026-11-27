@@ -116,11 +116,7 @@ jobs:
                 return { error: String(error) };
               }
             });
-            await page.waitForFunction(() => {
-              const s = document.querySelector("#kp-status")?.textContent || "";
-              return s !== "" && s !== "Connecting…";
-            }, null, { timeout: 20000 });
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(15000);
             const view = await page.evaluate(() => ({
               origin: location.origin,
               heading: document.querySelector("#kalshi-primary-app h1")?.textContent?.trim(),
